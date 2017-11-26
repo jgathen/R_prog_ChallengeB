@@ -1,0 +1,178 @@
+---
+title: "Challenge B"
+author: "Sharanya Pillai & Jonas Gathen"
+date: "26 November 2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(caret)
+library(randomForest)
+library(tidyverse)
+library(np)
+
+```
+
+## Task 1B: Fitting a random forest to predict housing prices
+
+### Step 1
+
+We are choosing a random forest. The following description and intuition of the method is mostly based on Hastie, Tibshirani & Friedman (2008) and James, Witten, Hastie & Tibshirani (2014):
+Random forests are based on tree-based methods. Tree-based methods work through iteratively segmenting the space of possible predictions based on certain splitting rules. The collection of these splitting rules can then be summarized in a tree-form, hence the name of this type of methods. Random forests represent a way in which to combine the predictions of multiple trees to form one combined prediction.
+It is especially linked to the method  of bagging. The essential idea in bagging is to reduce variance by averaging many noisy but approximately unbiased models. Trees are ideal candidates for bagging, since they can capture complex interaction structures in the data, and if grown sufficiently deep, have relatively low bias. Since trees are notoriously noisy, they benefit greatly from the averaging. Each tree generated in bagging is identically distributed, but not necessarily independent. This has the unfortunate consequence that even for many trees, the variance of the average of trees will face a lower bound that is given by the positive pairwise correlation of trees. 
+
+The idea in random forests is to improve the variance reduction of bagging by reducing the correlation between the trees, without increasing the variance too much. This is achieved by the following general algorithm:
+
++ Choose the size of your forest (i.e. how many trees you want to predict). 
++ Then for each tree, draw a bootstrap sample from the training data. 
++ With this sample, select a number m of variables at random from the total number of variables p.
++ Pick the best variable among the number of variables that were randomly drawn (based on splitting criterium) and split accordingly.
++ Again, randomly draw a prespecified number of variables from the total, pick the best variable and split. Repeat until a specified minimum node size is reached.
++ Save the resulting tree and repeat procedure to get the remaining trees.
++ The random forest predictor is given by the average of the trees. 
+
+The correlation between trees can be controlled by m. The smaller m, the smaller the correlation will be. However, with large p (the total number of variables) and many non-relevant variables, a small m can lead to weak performance. This is not likely to be a problem in this case here, because p is not very large and we actually have a large number of important variables. As a practical advice, for regression, the default value for m is p/3 and the minimum node size is five; this should be fine-tuned however and can vary significantly from one problem to another.
+
+### Step 2: Train the chosen technique on the training data
+
+We read the revised training data from the last challenge and train the model using the above-outlined algorithm for a random forest. We stick with the recommended default of 500 trees per forest and a terminal node size of 5. We call the random forest algorithm from within the caret-package to fine-tune the parameter m by using 5-fold cross-validation (10-fold just takes way too much time!!). We will use cross-validation on the entire training set, even though we still cannot use the test data to check the quality of our predictions.
+
+```{r cars}
+training <- read.csv(file = "training_final.csv", header = T)
+training <- training %>% select(-c(X,Id)) # Remove ID variables
+
+random_forest_model1 <- train(SalePrice~., data=training, method="rf")
+```
+
+### Step 3: Make predictions on the test data, and compare them to the predictions of a linear regression of your choice.
+
+We read the revised test dataset from the previous challenge. We use the previously trained model to make predictions on the test data. We then compare these predictions to the predictions obtained in the previous challenge, where we fitted a final model with Least Angle Regression. 
+
+```{r random_forest, cache=TRUE}
+test <- read.csv()
+predict(random_forest_model1, test)
+```
+
+
+
+
+## Task 2B - Overfitting in Machine Learning (continued) - 1 point for each step
+
+We can briefly create the data we need for this exercise. 
+
+```{r}
+nsims <- 150 # Number of simulations
+e <- rnorm(n = nsims, mean = 0, sd = 1) # Draw 150 errors from a normal distribution
+x <- rnorm(n = nsims, mean = 0, sd = 1) # Draw 150 x obs. from a normal distribution 
+y <- x^3+e # generate y following (T)
+df <- data.frame(y,x)
+
+df$ID <- c(1:150)
+training2 <- df[df$ID %in% sample(df$ID, size = 120, replace = F), ] # Get training set of size 120
+test2 <- df[!(df$ID %in% training2$ID), ] # Get remaining test dataset
+df$training <- (df$ID %in% training2$ID) # Create variable specifying whether obs. is in test or training set
+```
+
+
+### Step 1: Estimate a low-flexibility local linear model on the training data
+
+```{r low_flex_ll}
+ll.fit.lowflex <- npreg(training2, formula = y ~ x, method = "ll", bandwidth = 0.5)
+```
+
+### Step 2: Estimate a high-flexibility local linear model on the training data. 
+
+```{r high_flex_ll}
+ll.fit.highflex <- npreg(training2, formula = y ~ x, method = "ll", bandwidth = 0.01)
+```
+
+### Step 3: Plot the scatterplot of x-y, along with the predictions of ll.fit.lowflex and ll.fit.highflex, on only the training data.
+
+```{r}
+# Get predictions of both models for training2 data
+predict(training2, ll.fit.lowflex)
+predict(training2, ll.fit.highflex)
+
+ggplot(data = training2, mapping = aes(x = x, y = y)) + geom_point() + stat_function(fun = function(x) x^3) + 
+  geom_line() + # Plot predictions from lowflex
+  geom_line()   # Plot predictions from highflex
+```
+
+### Step 4 - Between the two models, which predictions are more variable? Which predictions have the least bias?
+
+
+```{r}
+```
+
+
+### Step 5 - Plot the scatterplot of x-y, along with the predictions of ll.fit.lowflex and ll.fit.highflex now using the test data. Which predictions are more variable? What happened to the bias of the least biased model?
+
+```{r}
+# Get predictions of both models for test2 data
+predict(test2, ll.fit.lowflex)
+predict(test2, ll.fit.highflex)
+
+ggplot(data = test2, mapping = aes(x = x, y = y)) + geom_point() + stat_function(fun = function(x) x^3) + 
+  geom_line() + # Plot predictions from lowflex
+  geom_line()   # Plot predictions from highflex
+```
+
+Compare bias and variance. 
+
+### Step 6 - Create a vector of bandwidth going from 0.01 to 0.5 with a step of 0.001
+
+```{r}
+bandwidth_vector <- seq(0.01,0.5,0.001)
+```
+
+### Step 7 - Estimate a local linear model y ~ x on the training data with each bandwidth.
+
+```{r}
+ll_models <- list()
+for(i in bandwidth_vector){
+  ll.fit <- npreg(training2, formula = y ~ x, method = "ll", bandwidth = i)
+  ll_models <- list(ll_models, ll.fit)
+  return(ll_models)
+}
+
+```
+
+### Step 8 - Compute for each bandwidth the MSE on the training data.
+
+```{r}
+get_MSE <- some function
+training_MSE <- sapply(ll_models, FUN = get_MSE)
+```
+
+### Step 9 - Compute for each bandwidth the MSE on the test data.
+
+```{r}
+# Write everything in one function
+get_MSE <- function(bandwidth_vector,df){
+  ll_models <- list()
+  for(i in bandwidth_vector){
+  ll.fit <- npreg(df, formula, method = "ll", bandwidth = i)
+  ll_models <- list(ll_models, ll.fit)
+  }
+  vector_MSE <- sapply(ll_models, FUN = MSE)
+}
+
+get_MSE(bandwidth_vector, test2)
+```
+
+### Step 10 - Draw on the same plot how the MSE on training data, and test data, change when the bandwidth increases. Conclude.
+
+```{r}
+ggplot() + 
+  geom_line(aes()) +  # MSE from training
+  geom_line()         # MSE from test
+
+```
+
+
+## Task 3B: Privacy regulation compliance in France
+
+
+

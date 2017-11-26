@@ -8,12 +8,34 @@ output: pdf_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-library(caret)
-library(randomForest)
-library(tidyverse)
-library(np)
+install_load <- function (package1, ...)  {   
 
+   # convert arguments to vector
+   packages <- c(package1, ...)
+
+   # start loop to determine if each package is installed
+   for(package in packages){
+
+       # if package is installed locally, load
+       if(package %in% rownames(installed.packages()))
+          do.call('library', list(package))
+
+       # if package is not installed locally, download, then load
+       else {
+          install.packages(package)
+          do.call("library", list(package))
+       }
+   } 
+}
+install_load("caret", 
+             "randomForest",
+             "tidyverse",
+             "np")
 ```
+
+The Github repository for this analysis can be found [here](https://github.com/jgathen/R_prog_ChallengeB/).
+The associated SSH-key is: git@github.com:jgathen/R_prog_ChallengeB.git
+The associated HTTPS-key is: https://github.com/jgathen/R_prog_ChallengeB.git
 
 ## Task 1B: Fitting a random forest to predict housing prices
 
@@ -37,24 +59,32 @@ The correlation between trees can be controlled by m. The smaller m, the smaller
 
 ### Step 2: Train the chosen technique on the training data
 
-We read the revised training data from the last challenge and train the model using the above-outlined algorithm for a random forest. We stick with the recommended default of 500 trees per forest and a terminal node size of 5. We call the random forest algorithm from within the caret-package to fine-tune the parameter m by using 5-fold cross-validation (10-fold just takes way too much time!!). We will use cross-validation on the entire training set, even though we still cannot use the test data to check the quality of our predictions.
+We read the revised training data from the last challenge and train the model using the above-outlined algorithm for a random forest. We stick with the recommended default of 500 trees per forest and a terminal node size of 5. We also use the default value for m as p/3. Usually, we would 
 
-```{r cars}
+We call the random forest algorithm from within the caret-package to fine-tune the parameter m by using 5-fold cross-validation (10-fold just takes way too much time!!). We will use cross-validation on the entire training set, even though we still cannot use the test data to check the quality of our predictions.
+
+```{r train_randomforest}
 training <- read.csv(file = "training_final.csv", header = T)
-training <- training %>% select(-c(X,Id)) # Remove ID variables
-
-random_forest_model1 <- train(SalePrice~., data=training, method="rf")
+random_forest_model1 <- train(SalePrice~.-Id, data=training, method="rf") # Fit RandomForest
 ```
 
 ### Step 3: Make predictions on the test data, and compare them to the predictions of a linear regression of your choice.
 
-We read the revised test dataset from the previous challenge. We use the previously trained model to make predictions on the test data. We then compare these predictions to the predictions obtained in the previous challenge, where we fitted a final model with Least Angle Regression. 
+We read the revised test dataset from the previous challenge. We use our trained model from above to make predictions on the test data. We then compare these predictions to the predictions obtained in the previous challenge, where we fitted a final model with Least Angle Regression. 
 
-```{r random_forest, cache=TRUE}
-test <- read.csv()
+```{r predictions_1B, cache=TRUE}
+test <- read.csv(file = "test_final.csv", header = TRUE)
+rf_predictions <- predict(random_forest_model1, test)
+
+lar_predictions <- read.csv(file = "final_predictions_ChallengeA.csv", header = TRUE)
 predict(random_forest_model1, test)
 ```
 
+We can now compare the predictions (without being able to look at the true values). Thus, we can plot the predictions against each other, look at their variance and the cases where the models differ more strongly. 
+
+```{r}
+
+```
 
 
 

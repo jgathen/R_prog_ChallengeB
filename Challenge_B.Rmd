@@ -30,11 +30,14 @@ install_load <- function (package1, ...)  {
 install_load("caret", 
              "randomForest",
              "tidyverse",
-             "np")
+             "np",
+             "reshape2")
 ```
 
 The Github repository for this analysis can be found [here](https://github.com/jgathen/R_prog_ChallengeB/).
+
 The associated SSH-key is: git@github.com:jgathen/R_prog_ChallengeB.git
+
 The associated HTTPS-key is: https://github.com/jgathen/R_prog_ChallengeB.git
 
 ## Task 1B: Fitting a random forest to predict housing prices
@@ -59,13 +62,11 @@ The correlation between trees can be controlled by m. The smaller m, the smaller
 
 ### Step 2: Train the chosen technique on the training data
 
-We read the revised training data from the last challenge and train the model using the above-outlined algorithm for a random forest. We stick with the recommended default of 500 trees per forest and a terminal node size of 5. We also use the default value for m as p/3. Usually, we would 
+We read the revised training data from the last challenge and train the model using the above-outlined algorithm for a random forest. We stick with the recommended default of 500 trees per forest and a terminal node size of 5. We also use the default value for m as p/3. Usually, we would call the random forest algorithm from within the caret-package to fine-tune the parameter m by using 5- or 10-fold cross-validation, using only the training set (because we don't have the necessary observations for using the test dataset). This takes too long, though; and the exercise is only meant to illustrate anyway. 
 
-We call the random forest algorithm from within the caret-package to fine-tune the parameter m by using 5-fold cross-validation (10-fold just takes way too much time!!). We will use cross-validation on the entire training set, even though we still cannot use the test data to check the quality of our predictions.
-
-```{r train_randomforest}
-training <- read.csv(file = "training_final.csv", header = T)
-random_forest_model1 <- train(SalePrice~.-Id, data=training, method="rf") # Fit RandomForest
+```{r train_randomforest, cache=TRUE}
+training <- read.csv(file = "training_final_ChallengeA.csv", header = T)
+random_forest_model1 <- randomForest(data=training, SalePrice~.-Id, ntree = 500, nodesize = 5)
 ```
 
 ### Step 3: Make predictions on the test data, and compare them to the predictions of a linear regression of your choice.
@@ -73,26 +74,35 @@ random_forest_model1 <- train(SalePrice~.-Id, data=training, method="rf") # Fit 
 We read the revised test dataset from the previous challenge. We use our trained model from above to make predictions on the test data. We then compare these predictions to the predictions obtained in the previous challenge, where we fitted a final model with Least Angle Regression. 
 
 ```{r predictions_1B, cache=TRUE}
-test <- read.csv(file = "test_final.csv", header = TRUE)
+test <- read.csv(file = "test_final_ChallengeA.csv", header = TRUE)
 rf_predictions <- predict(random_forest_model1, test)
-
 lar_predictions <- read.csv(file = "final_predictions_ChallengeA.csv", header = TRUE)
-predict(random_forest_model1, test)
+compare_predictions <- cbind(lar_predictions,rf_predictions)
 ```
 
-We can now compare the predictions (without being able to look at the true values). Thus, we can plot the predictions against each other, look at their variance and the cases where the models differ more strongly. 
+We can now compare the predictions (without being able to look at the true values). This is best illustrated by plotting the predictions against each other. The figure below shows that they are fairly close (r = 0.88). Main differences arise for extreme observations for which both models predict lower or higher prices on average. In general, the Least Angle Regression predicts more extreme values; for prices below average, the Least Angle regression model predicts much lower prices, for prices above average, the Least Angle regression predicts higher prices.
 
-```{r}
-
+```{r compare_predictions, results='asis', echo=FALSE}
+ggplot(data = compare_predictions) + 
+  geom_point(aes(x = log(SalePrice), y = log(rf_predictions)), alpha = 0.4) + # Plot logs of predicted Sale prices
+  stat_function(fun = function(x) x) + # Plot against 45 degree line
+  geom_vline(xintercept=mean(log(compare_predictions$SalePrice)), color = "red") + # Plot mean of LAR predictions
+  geom_hline(yintercept=mean(log(compare_predictions$rf_predictions)), color = "red") + # Plot mean of RF predictions
+  labs(title="Comparing model predictions", 
+       x ="Least Angle Regression Predictions (in logs)", 
+       y = "Random Forest Predictions (in logs)") +
+  annotate("text", x = 13, y = 14,label = paste("r = ", round(cor(compare_predictions$SalePrice, compare_predictions$rf_predictions), digits = 2)), size = 6) +
+  annotate("text", x = 9.5, y = 9.7, angle = 32, label = "45° line") +
+  annotate("text", x = 13.7, y = 12.2, label = "Mean of predictions")
 ```
-
 
 
 ## Task 2B - Overfitting in Machine Learning (continued) - 1 point for each step
 
-We can briefly create the data we need for this exercise. 
+We can briefly create the data we need for this exercise.
 
-```{r}
+```{r simulate_data}
+set.seed(1234)
 nsims <- 150 # Number of simulations
 e <- rnorm(n = nsims, mean = 0, sd = 1) # Draw 150 errors from a normal distribution
 x <- rnorm(n = nsims, mean = 0, sd = 1) # Draw 150 x obs. from a normal distribution 
@@ -109,29 +119,37 @@ df$training <- (df$ID %in% training2$ID) # Create variable specifying whether ob
 ### Step 1: Estimate a low-flexibility local linear model on the training data
 
 ```{r low_flex_ll}
-ll.fit.lowflex <- npreg(training2, formula = y ~ x, method = "ll", bandwidth = 0.5)
+ll.fit.lowflex <- npreg(training2, formula = y ~ x, method = "ll", bws = 0.5)
 ```
 
 ### Step 2: Estimate a high-flexibility local linear model on the training data. 
 
 ```{r high_flex_ll}
-ll.fit.highflex <- npreg(training2, formula = y ~ x, method = "ll", bandwidth = 0.01)
+ll.fit.highflex <- npreg(training2, formula = y ~ x, method = "ll", bws = 0.01)
 ```
 
 ### Step 3: Plot the scatterplot of x-y, along with the predictions of ll.fit.lowflex and ll.fit.highflex, on only the training data.
 
 ```{r}
-# Get predictions of both models for training2 data
-predict(training2, ll.fit.lowflex)
-predict(training2, ll.fit.highflex)
+# Get estimates of both models for training2 data
+lowflex_estimates <- data.frame(y_estimates_lowflex = ll.fit.lowflex$mean, y = training2$y, x = ll.fit.lowflex$eval)
+highflex_estimates <- data.frame(y_estimates_highflex = ll.fit.highflex$mean, y = training2$y, x = ll.fit.highflex$eval)
+combined_estimates <- merge(lowflex_estimates, highflex_estimates)
 
-ggplot(data = training2, mapping = aes(x = x, y = y)) + geom_point() + stat_function(fun = function(x) x^3) + 
-  geom_line() + # Plot predictions from lowflex
-  geom_line()   # Plot predictions from highflex
+ggplot(data = combined_estimates) + geom_point(aes(x = x, y = y)) + 
+  geom_line(aes(x = x, y = y_estimates_lowflex, color = "red")) +
+  geom_line(aes(x = x, y = y_estimates_highflex, color = "darkblue")) +
+  stat_function(fun = function(x) x^3) + 
+  scale_color_discrete(name = "Local Linear Regression", labels = c("Highflex", "Lowflex"))
 ```
 
 ### Step 4 - Between the two models, which predictions are more variable? Which predictions have the least bias?
 
+In machine learning, we look at models from the perspective of the bias-variance trade-off, where bias is 
+
+the variance of the learning method,or, intuitively, how much the learning method will move around its mean
+
+Judging only by looking at the predictions on the training dataset, the high-flexibility local linear model outperforms the low-flexibility-model in both bias and variance. The high-flexbility model has a low bias This is expected, because we only face a bias-variance trade-off when applying the model to the test data. The highfle
 
 ```{r}
 ```
@@ -141,12 +159,15 @@ ggplot(data = training2, mapping = aes(x = x, y = y)) + geom_point() + stat_func
 
 ```{r}
 # Get predictions of both models for test2 data
-predict(test2, ll.fit.lowflex)
-predict(test2, ll.fit.highflex)
+lowflex_predictions <- predict(ll.fit.lowflex, newdata = test2)
+highflex_predictions <- predict(ll.fit.highflex, newdata = test2)
+combined_predictions <- cbind(test2, lowflex_predictions, highflex_predictions)
 
-ggplot(data = test2, mapping = aes(x = x, y = y)) + geom_point() + stat_function(fun = function(x) x^3) + 
-  geom_line() + # Plot predictions from lowflex
-  geom_line()   # Plot predictions from highflex
+ggplot(data = combined_predictions) + geom_point(aes(x = x, y = y)) + 
+  geom_line(aes(x = x, y = lowflex_predictions, color = "red")) + # Plot predictions from lowflex
+  geom_line(aes(x = x, y = highflex_predictions, color = "darkblue")) + # Plot predictions from highflex
+  stat_function(fun = function(x) x^3) + 
+  scale_color_discrete(name = "Local Linear Regression", labels = c("Highflex", "Lowflex"))
 ```
 
 Compare bias and variance. 
@@ -159,46 +180,41 @@ bandwidth_vector <- seq(0.01,0.5,0.001)
 
 ### Step 7 - Estimate a local linear model y ~ x on the training data with each bandwidth.
 
-```{r}
-ll_models <- list()
-for(i in bandwidth_vector){
-  ll.fit <- npreg(training2, formula = y ~ x, method = "ll", bandwidth = i)
-  ll_models <- list(ll_models, ll.fit)
-  return(ll_models)
-}
+We can either do this via looping or in vectorized form. We don't expect there to be any differences in computation time however, because we are running a different regression for each bandwidth. If we would apply the exact same function to each of the vector's elements, then vectorization could save a lot of time.
 
+```{r}
+run_ll <- function(bandwidth){
+  npreg(training2, formula = y ~ x, method = "ll", bws = bandwidth)
+}
+ll_models <- lapply(X = bandwidth_vector, FUN = run_ll)
 ```
 
 ### Step 8 - Compute for each bandwidth the MSE on the training data.
 
+In the next step, we can just extract the already computed MSE from our model output. Again, vectorizing or looping take almost the same amount of time.
+
 ```{r}
-get_MSE <- some function
-training_MSE <- sapply(ll_models, FUN = get_MSE)
+MSE_training <- sapply(c(1:length(bandwidth_vector)), FUN = function(i) ll_models[[i]]$MSE)
 ```
 
 ### Step 9 - Compute for each bandwidth the MSE on the test data.
 
 ```{r}
-# Write everything in one function
-get_MSE <- function(bandwidth_vector,df){
-  ll_models <- list()
-  for(i in bandwidth_vector){
-  ll.fit <- npreg(df, formula, method = "ll", bandwidth = i)
-  ll_models <- list(ll_models, ll.fit)
-  }
-  vector_MSE <- sapply(ll_models, FUN = MSE)
+MSE_test <- c() 
+for(i in 1:length(bandwidth_vector)){
+  ll_model_predictions <- predict(ll_models[[i]], newdata = test2) # Get prediction for given bandwidth
+  MSE_test[i] <- mean((test2$y-ll_model_predictions)^2) # Compute mean squared error for given bandwidth
 }
-
-get_MSE(bandwidth_vector, test2)
 ```
 
 ### Step 10 - Draw on the same plot how the MSE on training data, and test data, change when the bandwidth increases. Conclude.
 
 ```{r}
+MSE <- data.frame(bandwidth = bandwidth_vector, MSE_training, MSE_test) # Combine in one dataset
+MSE_long <- melt(data = MSE, id.vars = c("bandwidth"), value.name = "MSE") # Get in long format
 ggplot() + 
-  geom_line(aes()) +  # MSE from training
-  geom_line()         # MSE from test
-
+  geom_line(data = MSE_long, aes(x = bandwidth, y = MSE, group = variable, color = variable)) + 
+  scale_color_discrete(name = "Mean Squared Error", labels = c("Training","Test"))
 ```
 
 

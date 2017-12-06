@@ -31,7 +31,10 @@ install_load("caret",
              "randomForest",
              "tidyverse",
              "np",
-             "reshape2")
+             "reshape2",
+             "VIM",
+             "stargazer",
+             "xtable")
 ```
 
 The Github repository for this analysis can be found [here](https://github.com/jgathen/R_prog_ChallengeB/).
@@ -82,7 +85,7 @@ compare_predictions <- cbind(lar_predictions,rf_predictions)
 
 We can now compare the predictions (without being able to look at the true values). This is best illustrated by plotting the predictions against each other. The figure below shows that they are fairly close (r = 0.88). Main differences arise for extreme observations for which both models predict lower or higher prices on average. In general, the Least Angle Regression predicts more extreme values; for prices below average, the Least Angle regression model predicts much lower prices, for prices above average, the Least Angle regression predicts higher prices.
 
-```{r compare_predictions, results='asis', echo=FALSE}
+```{r compare_predictions, results='asis', echo=FALSE, cache=TRUE}
 ggplot(data = compare_predictions) + 
   geom_point(aes(x = log(SalePrice), y = log(rf_predictions)), alpha = 0.4) + # Plot logs of predicted Sale prices
   stat_function(fun = function(x) x) + # Plot against 45 degree line
@@ -101,7 +104,7 @@ ggplot(data = compare_predictions) +
 
 We can briefly create the data we need for this exercise.
 
-```{r simulate_data}
+```{r simulate_data, cache=TRUE}
 set.seed(1234)
 nsims <- 150 # Number of simulations
 e <- rnorm(n = nsims, mean = 0, sd = 1) # Draw 150 errors from a normal distribution
@@ -118,19 +121,19 @@ df$training <- (df$ID %in% training2$ID) # Create variable specifying whether ob
 
 ### Step 1: Estimate a low-flexibility local linear model on the training data
 
-```{r low_flex_ll}
+```{r low_flex_ll, cache=TRUE}
 ll.fit.lowflex <- npreg(training2, formula = y ~ x, method = "ll", bws = 0.5)
 ```
 
 ### Step 2: Estimate a high-flexibility local linear model on the training data. 
 
-```{r high_flex_ll}
+```{r high_flex_ll, cache=TRUE}
 ll.fit.highflex <- npreg(training2, formula = y ~ x, method = "ll", bws = 0.01)
 ```
 
 ### Step 3: Plot the scatterplot of x-y, along with the predictions of ll.fit.lowflex and ll.fit.highflex, on only the training data.
 
-```{r}
+```{r, cache=TRUE}
 # Get estimates of both models for training2 data
 lowflex_estimates <- data.frame(y_estimates_lowflex = ll.fit.lowflex$mean, y = training2$y, x = ll.fit.lowflex$eval)
 highflex_estimates <- data.frame(y_estimates_highflex = ll.fit.highflex$mean, y = training2$y, x = ll.fit.highflex$eval)
@@ -157,7 +160,7 @@ Judging only by looking at the predictions on the training dataset, the high-fle
 
 ### Step 5 - Plot the scatterplot of x-y, along with the predictions of ll.fit.lowflex and ll.fit.highflex now using the test data. Which predictions are more variable? What happened to the bias of the least biased model?
 
-```{r}
+```{r, cache=TRUE}
 # Get predictions of both models for test2 data
 lowflex_predictions <- predict(ll.fit.lowflex, newdata = test2)
 highflex_predictions <- predict(ll.fit.highflex, newdata = test2)
@@ -174,7 +177,7 @@ Compare bias and variance.
 
 ### Step 6 - Create a vector of bandwidth going from 0.01 to 0.5 with a step of 0.001
 
-```{r}
+```{r, cache=TRUE}
 bandwidth_vector <- seq(0.01,0.5,0.001)
 ```
 
@@ -182,7 +185,7 @@ bandwidth_vector <- seq(0.01,0.5,0.001)
 
 We can either do this via looping or in vectorized form. We don't expect there to be any differences in computation time however, because we are running a different regression for each bandwidth. If we would apply the exact same function to each of the vector's elements, then vectorization could save a lot of time.
 
-```{r}
+```{r, cache=TRUE}
 run_ll <- function(bandwidth){
   npreg(training2, formula = y ~ x, method = "ll", bws = bandwidth)
 }
@@ -193,13 +196,13 @@ ll_models <- lapply(X = bandwidth_vector, FUN = run_ll)
 
 In the next step, we can just extract the already computed MSE from our model output. Again, vectorizing or looping take almost the same amount of time.
 
-```{r}
+```{r, cache=TRUE}
 MSE_training <- sapply(c(1:length(bandwidth_vector)), FUN = function(i) ll_models[[i]]$MSE)
 ```
 
 ### Step 9 - Compute for each bandwidth the MSE on the test data.
 
-```{r}
+```{r, cache=TRUE}
 MSE_test <- c() 
 for(i in 1:length(bandwidth_vector)){
   ll_model_predictions <- predict(ll_models[[i]], newdata = test2) # Get prediction for given bandwidth
@@ -209,7 +212,7 @@ for(i in 1:length(bandwidth_vector)){
 
 ### Step 10 - Draw on the same plot how the MSE on training data, and test data, change when the bandwidth increases. Conclude.
 
-```{r}
+```{r, cache=TRUE}
 MSE <- data.frame(bandwidth = bandwidth_vector, MSE_training, MSE_test) # Combine in one dataset
 MSE_long <- melt(data = MSE, id.vars = c("bandwidth"), value.name = "MSE") # Get in long format
 ggplot() + 
@@ -220,5 +223,73 @@ ggplot() +
 
 ## Task 3B: Privacy regulation compliance in France
 
+### Step 1 - Import the CIL dataset from the Open Data Portal. (1 point)
+
+In order to guarantee reproducibility of the research, we first download the data into the Github repository and then load the dataset from there. We briefly check whether all variables are read correctly and whether we have issues with missing values. We delete all 302 observations for which we don't have the SIREN number.
+
+```{r, echo=TRUE, results='hide'}
+cil <- read.csv("cil.csv", header=TRUE, sep = ";", na.strings = c(""," ",NA,".",",",";")) 
+str(cil)
+
+# Check missings
+aggr(cil, plot = FALSE)
+cil <- cil %>% filter(!is.na(Siren)) # Delete all observations for which we don't observe SIREN number
+```
+
+### Step 2 - Show a (nice) table with the number of organizations that have nominated a CIL per department. HINT : A department in France is uniquely identified by the first two digits of the postcode. (1 point)
+
+We first create a variable for the department by taking the first two characters from the postal code variable. Then, we create a new dataset that only includes unique Sirens per department and count the number of CIL delegates by the same company that sends multiple CILs per department. At last, we count how many different organizations have nominated at least one CIL per department. 
+
+```{r, results='asis', tidy=TRUE}
+cil$Department <- as.factor(substr(cil$Code_Postal, start = 1,stop = 2)) # Get department variable
+cil_by_Siren_by_dpt <- cil %>% count(Department,Siren) # Number of nominations per Siren number per department
+names(cil_by_Siren_by_dpt) <- c("Department", "Siren", "Nominations") # Rename variables
+cil_by_dpt <- cil_by_Siren_by_dpt %>% count(Department) # Number of Siren numbers per department
+names(cil_by_dpt) <- c("Department", "Nominations") # Rename variables
+```
+
+```{r, echo = FALSE, results='asis'}
+summaryfunction <- function(x){
+  if( is.numeric(x)!=TRUE) {stop("Supplied X is not numeric")}
+  mysummary = data.frame(
+            "Obs." = length(x),
+            "Min." = as.numeric( min(x)),
+            "First Q." = quantile(x)[[2]],
+            "Median" = median(x),
+            "Mean" = mean(x),
+            "Third Q." = quantile(x)[[4]],
+            "Max." = max(x))
+  return(mysummary)
+}
+
+print(xtable(summaryfunction(cil_by_Siren_by_dpt$Nominations), caption = "Number of nominations per Siren per Department"), 
+      comment=FALSE, include.rownames = FALSE)
+print(xtable(summaryfunction(cil_by_dpt$Nominations), caption = "Number of organizations per department"), 
+      comment=FALSE, include.rownames = FALSE)
+```
+
+### Step 3 - Merge the information from the SIREN dataset into the CNIL data. Explain the method you use. HINT : In the SIREN dataset, there are some rows that refer to the same SIREN number, use the most up to date information about each company. (2 points)
+
+First we import the data set using the function read.table(). The import time is reduced drastically when adding several arguments inside the read.table() command, we therefore set the following arguments inside the table when importing it.
+siren<-read.table(file = "~/rprog/SIREN.csv", header = TRUE,fill=TRUE, sep=";", 
+                  na.strings = "EMPTY", strip.white = TRUE, comment.char="", 
+                  stringsAsFactors = FALSE, nrows = 1048576)
+The  time required for the task is found by using the function system.time.
+system.time(read.table(file = "~/rprog/SIREN.csv", 
+                       header = TRUE,fill=TRUE, sep=";", 
+                       na.strings = "EMPTY", strip.white = TRUE, 
+                       comment.char="", stringsAsFactors = FALSE, 
+                       nrows = 1048576))
+Then we transform cil to a data table so that the format of the data is similiar. We then merge the the list of CIL representatives and the SIREN data set by the variable "SIREN" since this variable is the same in the two data sets.
+cil2<-setDT(cil1)
+x<-cil2
+y<-siren
+total <- merge(x, y, by = "SIREN", all=FALSE)
+The new data table "total" now only contains the companies that have a cil representative in the data set SIREN. If one wishes to include the companies that do not have a CIL representative this is easy to do, by only changing the argument all=TRUE.
+
+### Step 4 - Plot the histogram of the size of the companies that nominated a CIL. Comment. (1 points)
+
+Since we now have the data set total that contains all the companies that have a CIL representative we use the data.table total to plot the size of the company by the size.
+plot(total$NAF)
 
 

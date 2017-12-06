@@ -34,7 +34,9 @@ install_load("caret",
              "reshape2",
              "VIM",
              "stargazer",
-             "xtable")
+             "xtable",
+             "data.table",
+             "gridExtra")
 ```
 
 The Github repository for this analysis can be found [here](https://github.com/jgathen/R_prog_ChallengeB/).
@@ -262,7 +264,7 @@ summaryfunction <- function(x){
   return(mysummary)
 }
 
-print(xtable(summaryfunction(cil_by_Siren_by_dpt$Nominations), caption = "Number of nominations per Siren per Department"), 
+print(xtable(summaryfunction(cil_by_Siren_by_dpt$Nominations), caption = "Number of nominations per Siren per Department"),
       comment=FALSE, include.rownames = FALSE)
 print(xtable(summaryfunction(cil_by_dpt$Nominations), caption = "Number of organizations per department"), 
       comment=FALSE, include.rownames = FALSE)
@@ -270,26 +272,39 @@ print(xtable(summaryfunction(cil_by_dpt$Nominations), caption = "Number of organ
 
 ### Step 3 - Merge the information from the SIREN dataset into the CNIL data. Explain the method you use. HINT : In the SIREN dataset, there are some rows that refer to the same SIREN number, use the most up to date information about each company. (2 points)
 
-First we import the data set using the function read.table(). The import time is reduced drastically when adding several arguments inside the read.table() command, we therefore set the following arguments inside the table when importing it.
-siren<-read.table(file = "~/rprog/SIREN.csv", header = TRUE,fill=TRUE, sep=";", 
-                  na.strings = "EMPTY", strip.white = TRUE, comment.char="", 
-                  stringsAsFactors = FALSE, nrows = 1048576)
-The  time required for the task is found by using the function system.time.
-system.time(read.table(file = "~/rprog/SIREN.csv", 
-                       header = TRUE,fill=TRUE, sep=";", 
-                       na.strings = "EMPTY", strip.white = TRUE, 
-                       comment.char="", stringsAsFactors = FALSE, 
-                       nrows = 1048576))
-Then we transform cil to a data table so that the format of the data is similiar. We then merge the the list of CIL representatives and the SIREN data set by the variable "SIREN" since this variable is the same in the two data sets.
-cil2<-setDT(cil1)
-x<-cil2
-y<-siren
-total <- merge(x, y, by = "SIREN", all=FALSE)
-The new data table "total" now only contains the companies that have a cil representative in the data set SIREN. If one wishes to include the companies that do not have a CIL representative this is easy to do, by only changing the argument all=TRUE.
+Reproducibility with such large datasets is problematic, because it is not possible to store such a large dataset on Github and the link for the dataset might change subsequently. Thus, we download and locally save the dataset to make sure that we always keep the version for which the analysis was done. In the following, we assume that the dataset is locally stored in the folder of the RProject. 
+
+We proceed in three steps. First, we load the SIREN dataset. We are only interested in the organizations/firms that have a CIL representative. Unfortunately, we still have to read the entire dataset, because there are potentially duplicate SIREN numbers in the SIREN dataset. Before we can merge parts of the SIREN dataset with the CNIL dataset, we need to correct for these duplicates. We can save computation time and memory by preselecting variables of interest.
+
+After having loaded the dataset, we convert the column classes into the classes we need. Then, we group by SIREN number and delete all duplicate SIREN numbers except the most recent entries given by the DATEMAJ column. 
+
+In the third step, we merge (or left_join) the amended SIREN dataset with the CNIL dataset. This adds company-related variables for all observations in the CNIL dataset for which there is data in the SIREN dataset.
+
+
+```{r, cache=TRUE}
+column_names_siren <- names(fread(file = "siren.csv", header = TRUE, fill = TRUE, sep = ";", nrows = 0))
+variable_selection <- c("SIREN","CODPOS","DEPET","TEFET","EFETCENT","EFENCENT","DATEMAJ") # Make selection of 7 variables
+
+system.time(siren <- fread(file = "siren.csv", header = TRUE, fill = TRUE, sep = ";", select = variable_selection,
+               na.strings = c("",NA,"NN")))
+
+siren[,c(1:6)] <- lapply(siren[,c(1:6)], function(x) as.numeric(as.character(x))) # Convert var. to integer
+siren$DATEMAJ <- gsub("T", " ", siren$DATEMAJ) # Change format of date/time so that R understands its a date/time
+siren$DATEMAJ <- as.POSIXct(siren$DATEMAJ) # Convert character to date format
+
+siren <- siren %>% group_by(SIREN) %>% filter(DATEMAJ == max(DATEMAJ)) %>% ungroup() # Delete duplicates
+
+cil_final <- left_join(cil_by_Siren_by_dpt, siren, by = c("Siren" = "SIREN"))
+```
+
 
 ### Step 4 - Plot the histogram of the size of the companies that nominated a CIL. Comment. (1 points)
 
-Since we now have the data set total that contains all the companies that have a CIL representative we use the data.table total to plot the size of the company by the size.
-plot(total$NAF)
+The size of the company can be measured in numerous ways. In the online documentation for the SIREN data, there is also a variable on revenue (CAW), however, this seems not to be included in the dataset. Alternatively, we proxy the size of the companies that nominated a CIL by their number of employees. For this we have data both on the specific department-level enterprise (the specific branch) and the entire company. We compare both of them. 
 
+```{r}
+plot_size_dpt <- ggplot(data = cil_final) + geom_histogram(aes(log(EFETCENT)))
+plot_size_total <- ggplot(data = cil_final) + geom_histogram(aes(log(EFENCENT)))
+grid.arrange(plot_size_dpt, plot_size_total, ncol = 2)
+```
 

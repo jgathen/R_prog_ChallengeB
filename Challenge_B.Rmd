@@ -67,7 +67,7 @@ The correlation between trees can be controlled by m. The smaller m, the smaller
 
 ### Step 2: Train the chosen technique on the training data
 
-We read the revised training data from the last challenge and train the model using the above-outlined algorithm for a random forest. We stick with the recommended default of 500 trees per forest and a terminal node size of 5. We also use the default value for m as p/3. Usually, we would call the random forest algorithm from within the caret-package to fine-tune the parameter m by using 5- or 10-fold cross-validation, using only the training set (because we don't have the necessary observations for using the test dataset). This takes too long, though; and the exercise is only meant to illustrate anyway. 
+We read the revised training data from the last challenge and train the model using the above-outlined algorithm for a random forest. We stick with the recommended default of 500 trees per forest and a terminal node size of 5. We also use the default value for m as p/3. Usually, we would call the random forest algorithm from within the caret-package to fine-tune the parameter m by using 5- or 10-fold cross-validation. This takes too long, though; and the exercise is only meant to illustrate anyway. 
 
 ```{r train_randomforest, cache=TRUE}
 training <- read.csv(file = "training_final_ChallengeA.csv", header = T)
@@ -135,10 +135,14 @@ ll.fit.highflex <- npreg(training2, formula = y ~ x, method = "ll", bws = 0.01)
 
 ### Step 3: Plot the scatterplot of x-y, along with the predictions of ll.fit.lowflex and ll.fit.highflex, on only the training data.
 
-```{r, cache=TRUE}
+```{r, cache=TRUE, tidy=TRUE}
 # Get estimates of both models for training2 data
-lowflex_estimates <- data.frame(y_estimates_lowflex = ll.fit.lowflex$mean, y = training2$y, x = ll.fit.lowflex$eval)
-highflex_estimates <- data.frame(y_estimates_highflex = ll.fit.highflex$mean, y = training2$y, x = ll.fit.highflex$eval)
+lowflex_estimates <- data.frame(y_estimates_lowflex = ll.fit.lowflex$mean, 
+                                y = training2$y, 
+                                x = ll.fit.lowflex$eval)
+highflex_estimates <- data.frame(y_estimates_highflex = ll.fit.highflex$mean, 
+                                 y = training2$y, 
+                                 x = ll.fit.highflex$eval)
 combined_estimates <- merge(lowflex_estimates, highflex_estimates)
 
 ggplot(data = combined_estimates) + geom_point(aes(x = x, y = y)) + 
@@ -150,19 +154,13 @@ ggplot(data = combined_estimates) + geom_point(aes(x = x, y = y)) +
 
 ### Step 4 - Between the two models, which predictions are more variable? Which predictions have the least bias?
 
-In machine learning, we look at models from the perspective of the bias-variance trade-off, where bias is 
+In machine learning, we look at models from the perspective of the bias-variance trade-off. We can decompose the test error into the irreducible error - i.e. the error of the true model -, the squared bias and the variance. Bias gives the difference between the true mean of the model and the estimated mean and variance gives the variability of a model prediction for a given data point.
 
-the variance of the learning method,or, intuitively, how much the learning method will move around its mean
-
-Judging only by looking at the predictions on the training dataset, the high-flexibility local linear model outperforms the low-flexibility-model in both bias and variance. The high-flexbility model has a low bias This is expected, because we only face a bias-variance trade-off when applying the model to the test data. The highfle
-
-```{r}
-```
-
+For the training data, we don't have the bias-variance trade-off and we could theoretically train a model with zero training error (and thus zero bias and variance). Here, we see a positive training error; the more flexible model has a lower bias and predictions are more variable (though the variance of the training error is still lower). 
 
 ### Step 5 - Plot the scatterplot of x-y, along with the predictions of ll.fit.lowflex and ll.fit.highflex now using the test data. Which predictions are more variable? What happened to the bias of the least biased model?
 
-```{r, cache=TRUE}
+```{r, cache=TRUE, tidy=TRUE}
 # Get predictions of both models for test2 data
 lowflex_predictions <- predict(ll.fit.lowflex, newdata = test2)
 highflex_predictions <- predict(ll.fit.highflex, newdata = test2)
@@ -175,7 +173,7 @@ ggplot(data = combined_predictions) + geom_point(aes(x = x, y = y)) +
   scale_color_discrete(name = "Local Linear Regression", labels = c("Highflex", "Lowflex"))
 ```
 
-Compare bias and variance. 
+Again, predictions for the highly flexible model are more variable. The bias of both models is fairly similar, with the highflex model maybe slightly better. As expected, the highflex model had a much lower bias on the training data, which points to overfitting. 
 
 ### Step 6 - Create a vector of bandwidth going from 0.01 to 0.5 with a step of 0.001
 
@@ -196,13 +194,15 @@ ll_models <- lapply(X = bandwidth_vector, FUN = run_ll)
 
 ### Step 8 - Compute for each bandwidth the MSE on the training data.
 
-In the next step, we can just extract the already computed MSE from our model output. Again, vectorizing or looping take almost the same amount of time.
+In the next step, we can just extract the already computed MSE from our model output. Again, vectorizing or looping take the same amount of time.
 
 ```{r, cache=TRUE}
 MSE_training <- sapply(c(1:length(bandwidth_vector)), FUN = function(i) ll_models[[i]]$MSE)
 ```
 
 ### Step 9 - Compute for each bandwidth the MSE on the test data.
+
+Again, a simple loop will do.
 
 ```{r, cache=TRUE}
 MSE_test <- c() 
@@ -221,6 +221,8 @@ ggplot() +
   geom_line(data = MSE_long, aes(x = bandwidth, y = MSE, group = variable, color = variable)) + 
   scale_color_discrete(name = "Mean Squared Error", labels = c("Training","Test"))
 ```
+
+The graph (almost) speaks for itself. Choosing a low bandwidth - i.e. fitting a highly flexible model - leads to a MSE of almost zero for the training data, but to a high MSE on the test data. Decreasing the flexibility of the model leads to an increase in MSE for the training data, but to a decrease in MSE for the test data. While the MSE is monotonically increasing with lower flexibility for the training data, there is an optimal level of flexibility for the test data, as we would expect. At some point, lowering the flexibility will underestimate the complexity of the true model. Thus, from this graph, we would like to train a model with a bandwidth of around 0.32.
 
 
 ## Task 3B: Privacy regulation compliance in France
@@ -274,7 +276,7 @@ print(xtable(summaryfunction(cil_by_dpt$Nominations), caption = "Number of organ
 
 Reproducibility with such large datasets is problematic, because it is not possible to store such a large dataset on Github and the link for the dataset might change subsequently. Thus, we download and locally save the dataset to make sure that we always keep the version for which the analysis was done. In the following, we assume that the dataset is locally stored in the folder of the RProject. 
 
-We proceed in three steps. First, we load the SIREN dataset. We are only interested in the organizations/firms that have a CIL representative. Unfortunately, we still have to read the entire dataset, because there are potentially duplicate SIREN numbers in the SIREN dataset. Before we can merge parts of the SIREN dataset with the CNIL dataset, we need to correct for these duplicates. We can save computation time and memory by preselecting variables of interest.
+We proceed in three steps. First, we load the SIREN dataset. We are only interested in the organizations/firms that have a CIL representative. Unfortunately, we still have to read the entire dataset, because there are duplicate SIREN numbers in the SIREN dataset. To save memory, we could load this in chunks and start deleting all Siren numbers which are not in the CNIL dataset. This is a memory vs. computation time trade-off. Here, we choose in favor of computation time and load everything at once. We can save computation time and memory by preselecting variables of interest.
 
 After having loaded the dataset, we convert the column classes into the classes we need. Then, we group by SIREN number and delete all duplicate SIREN numbers except the most recent entries given by the DATEMAJ column. 
 
@@ -283,18 +285,18 @@ In the third step, we merge (or left_join) the amended SIREN dataset with the CN
 
 ```{r, cache=TRUE}
 column_names_siren <- names(fread(file = "siren.csv", header = TRUE, fill = TRUE, sep = ";", nrows = 0))
-variable_selection <- c("SIREN","CODPOS","DEPET","TEFET","EFETCENT","EFENCENT","DATEMAJ") # Make selection of 7 variables
+variable_selection <- c("SIREN","DEPET","EFETCENT","EFENCENT","DATEMAJ") # Make selection of 5 variables
 
 system.time(siren <- fread(file = "siren.csv", header = TRUE, fill = TRUE, sep = ";", select = variable_selection,
                na.strings = c("",NA,"NN")))
 
-siren[,c(1:6)] <- lapply(siren[,c(1:6)], function(x) as.numeric(as.character(x))) # Convert var. to integer
+siren[,c(1:4)] <- lapply(siren[,c(1:4)], function(x) as.numeric(as.character(x))) # Convert var. to integer
 siren$DATEMAJ <- gsub("T", " ", siren$DATEMAJ) # Change format of date/time so that R understands its a date/time
 siren$DATEMAJ <- as.POSIXct(siren$DATEMAJ) # Convert character to date format
 
-siren <- siren %>% group_by(SIREN) %>% filter(DATEMAJ == max(DATEMAJ)) %>% ungroup() # Delete duplicates
+siren <- siren %>% group_by(SIREN, DEPET) %>% filter(DATEMAJ == max(DATEMAJ)) %>% ungroup() # Delete duplicates
 
-cil_final <- left_join(cil_by_Siren_by_dpt, siren, by = c("Siren" = "SIREN"))
+cil_final <- left_join(cil_by_Siren_by_dpt, siren, by = c("Siren" = "SIREN", "Department" = "DEPET"))
 ```
 
 
@@ -302,9 +304,11 @@ cil_final <- left_join(cil_by_Siren_by_dpt, siren, by = c("Siren" = "SIREN"))
 
 The size of the company can be measured in numerous ways. In the online documentation for the SIREN data, there is also a variable on revenue (CAW), however, this seems not to be included in the dataset. Alternatively, we proxy the size of the companies that nominated a CIL by their number of employees. For this we have data both on the specific department-level enterprise (the specific branch) and the entire company. We compare both of them. 
 
-```{r}
+```{r, results=}
 plot_size_dpt <- ggplot(data = cil_final) + geom_histogram(aes(log(EFETCENT)))
 plot_size_total <- ggplot(data = cil_final) + geom_histogram(aes(log(EFENCENT)))
-grid.arrange(plot_size_dpt, plot_size_total, ncol = 2)
+grid.arrange(plot_size_dpt, plot_size_total, ncol = 2, 
+             main = "Size of companies that nominated a CIL representative",
+             bottom = "Measured by number of workers (in logs). Left graph gives size of the establishment and right graph gives size of the entire company. In many cases, these will be equivalent, but large companies will have multiple establishments.")
 ```
 

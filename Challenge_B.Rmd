@@ -49,9 +49,10 @@ The associated HTTPS-key is: https://github.com/jgathen/R_prog_ChallengeB.git
 
 ### Step 1
 
-We are choosing a random forest. The following description and intuition of the method is mostly based on Hastie, Tibshirani & Friedman (2008) and James, Witten, Hastie & Tibshirani (2014):
-Random forests are based on tree-based methods. Tree-based methods work through iteratively segmenting the space of possible predictions based on certain splitting rules. The collection of these splitting rules can then be summarized in a tree-form, hence the name of this type of methods. Random forests represent a way in which to combine the predictions of multiple trees to form one combined prediction.
-It is especially linked to the method  of bagging. The essential idea in bagging is to reduce variance by averaging many noisy but approximately unbiased models. Trees are ideal candidates for bagging, since they can capture complex interaction structures in the data, and if grown sufficiently deep, have relatively low bias. Since trees are notoriously noisy, they benefit greatly from the averaging. Each tree generated in bagging is identically distributed, but not necessarily independent. This has the unfortunate consequence that even for many trees, the variance of the average of trees will face a lower bound that is given by the positive pairwise correlation of trees. 
+We are choosing a random forest. The following description and intuition of the method is mostly based on Hastie, Tibshirani & Friedman (2008) and James, Witten, Hastie & Tibshirani (2014).
+Random forests are based on tree-based methods. Tree-based methods work through iteratively segmenting the space of possible predictions based on certain splitting rules. The collection of these splitting rules can then be summarized in a tree-form. Random forests represent a way in which to combine the predictions of multiple trees to form one combined prediction.
+
+It is especially linked to the method  of bagging. The essential idea in bagging is to reduce variance by averaging many noisy but approximately unbiased models. Since trees are notoriously noisy, they benefit greatly from the averaging. Each tree generated in bagging is identically distributed, but not necessarily independent. This has the unfortunate consequence that even for many trees, the variance of the average of trees will face a lower bound that is given by the positive pairwise correlation of trees. 
 
 The idea in random forests is to improve the variance reduction of bagging by reducing the correlation between the trees, without increasing the variance too much. This is achieved by the following general algorithm:
 
@@ -148,8 +149,9 @@ combined_estimates <- merge(lowflex_estimates, highflex_estimates)
 ggplot(data = combined_estimates) + geom_point(aes(x = x, y = y)) + 
   geom_line(aes(x = x, y = y_estimates_lowflex, color = "red")) +
   geom_line(aes(x = x, y = y_estimates_highflex, color = "darkblue")) +
-  stat_function(fun = function(x) x^3) + 
-  scale_color_discrete(name = "Local Linear Regression", labels = c("Highflex", "Lowflex"))
+  stat_function(fun = function(x) x^3) +
+  scale_color_discrete(name = "Local Linear Regression", 
+                       labels = c("Highflex", "Lowflex"))
 ```
 
 ### Step 4 - Between the two models, which predictions are more variable? Which predictions have the least bias?
@@ -244,8 +246,8 @@ cil <- cil %>% filter(!is.na(Siren)) # Delete all observations for which we don'
 
 We first create a variable for the department by taking the first two characters from the postal code variable. Then, we create a new dataset that only includes unique Sirens per department and count the number of CIL delegates by the same company that sends multiple CILs per department. At last, we count how many different organizations have nominated at least one CIL per department. 
 
-```{r, results='asis', tidy=TRUE}
-cil$Department <- as.factor(substr(cil$Code_Postal, start = 1,stop = 2)) # Get department variable
+```{r, tidy=TRUE, message=FALSE, warning=FALSE, tidy=TRUE}
+cil$Department <- as.numeric(substr(cil$Code_Postal, start = 1,stop = 2)) # Get department variable
 cil_by_Siren_by_dpt <- cil %>% count(Department,Siren) # Number of nominations per Siren number per department
 names(cil_by_Siren_by_dpt) <- c("Department", "Siren", "Nominations") # Rename variables
 cil_by_dpt <- cil_by_Siren_by_dpt %>% count(Department) # Number of Siren numbers per department
@@ -283,32 +285,37 @@ After having loaded the dataset, we convert the column classes into the classes 
 In the third step, we merge (or left_join) the amended SIREN dataset with the CNIL dataset. This adds company-related variables for all observations in the CNIL dataset for which there is data in the SIREN dataset.
 
 
-```{r, cache=TRUE}
-column_names_siren <- names(fread(file = "siren.csv", header = TRUE, fill = TRUE, sep = ";", nrows = 0))
-variable_selection <- c("SIREN","DEPET","EFETCENT","EFENCENT","DATEMAJ") # Make selection of 5 variables
+```{r, cache=TRUE, tidy=TRUE, warning=FALSE}
+#column_names_siren <- names(fread(file = "siren.csv", header = TRUE, fill = TRUE, sep = ";", nrows = 0))
+#variable_selection <- c("SIREN","DEPET","EFETCENT","EFENCENT","DATEMAJ") # Make selection of 5 variables
 
-system.time(siren <- fread(file = "siren.csv", header = TRUE, fill = TRUE, sep = ";", select = variable_selection,
-               na.strings = c("",NA,"NN")))
+#system.time(siren <- fread(file = "siren.csv", header = TRUE, fill = TRUE, sep = ";", select = variable_selection,
+#               na.strings = c("",NA,"NN")))
 
-siren[,c(1:4)] <- lapply(siren[,c(1:4)], function(x) as.numeric(as.character(x))) # Convert var. to integer
-siren$DATEMAJ <- gsub("T", " ", siren$DATEMAJ) # Change format of date/time so that R understands its a date/time
-siren$DATEMAJ <- as.POSIXct(siren$DATEMAJ) # Convert character to date format
+#siren[,c(1:4)] <- lapply(siren[,c(1:4)], function(x) as.numeric(as.character(x))) # Convert var. to integer
+#siren$DATEMAJ <- gsub("T", " ", siren$DATEMAJ) # Change format of date/time so that R understands its a date/time
+#siren$DATEMAJ <- as.POSIXct(siren$DATEMAJ) # Convert character to date format
 
-siren <- siren %>% group_by(SIREN, DEPET) %>% filter(DATEMAJ == max(DATEMAJ)) %>% ungroup() # Delete duplicates
+#siren <- siren %>% group_by(SIREN, DEPET) %>% filter(DATEMAJ == max(DATEMAJ)) %>% ungroup() # Delete duplicates
 
-cil_final <- left_join(cil_by_Siren_by_dpt, siren, by = c("Siren" = "SIREN", "Department" = "DEPET"))
+#cil_final <- left_join(cil_by_Siren_by_dpt, siren, by = c("Siren" = "SIREN", "Department" = "DEPET"))
 ```
 
 
 ### Step 4 - Plot the histogram of the size of the companies that nominated a CIL. Comment. (1 points)
 
-The size of the company can be measured in numerous ways. In the online documentation for the SIREN data, there is also a variable on revenue (CAW), however, this seems not to be included in the dataset. Alternatively, we proxy the size of the companies that nominated a CIL by their number of employees. For this we have data both on the specific department-level enterprise (the specific branch) and the entire company. We compare both of them. 
+The size of the company can be measured in numerous ways. We proxy the size of the companies that nominated a CIL by their number of employees. For this we have data both on the specific department-level establishment and the entire company. We compare both of them. 
 
-```{r, results=}
-plot_size_dpt <- ggplot(data = cil_final) + geom_histogram(aes(log(EFETCENT)))
-plot_size_total <- ggplot(data = cil_final) + geom_histogram(aes(log(EFENCENT)))
-grid.arrange(plot_size_dpt, plot_size_total, ncol = 2, 
-             main = "Size of companies that nominated a CIL representative",
-             bottom = "Measured by number of workers (in logs). Left graph gives size of the establishment and right graph gives size of the entire company. In many cases, these will be equivalent, but large companies will have multiple establishments.")
+```{r, tidy=TRUE, message=FALSE, warning=FALSE}
+#plot_size_dpt <- ggplot(data = cil_final) + geom_histogram(aes(log(EFETCENT)))
+#plot_size_total <- ggplot(data = cil_final) + geom_histogram(aes(log(EFENCENT)))
+#grid.arrange(plot_size_dpt, plot_size_total, ncol = 2,
+#             top = paste0("Size of companies that"," nominated a CIL representative"),
+#             bottom = textGrob(paste0("Measured by number of workers"," (in logs).",
+#                                      " Size of establishment (left) and",
+#                                      " size of the entire company (right)."), 
+#             gp=gpar(fontsize=9,font=8)))
 ```
+
+The distribution is unimodal with the mode at a value of about 15 workers (note that the variable is discretized and all figures are rounded down). There is a long right tail (note that the figure is log-transformed), so some establishments and companies have many more workers. For example, log(8) is equal to almost 3000 workers. Naturally, companies have more workers than establishments. It would be helpful to compare these figures to the entire distribution of French establishments and companies. 
 
